@@ -189,10 +189,47 @@ if xls_file:
         xls_refs = df_xls['Property ref'].astype(str).str.strip()
         xml_refs = [p.findtext("external_reference", "").strip() for p in properties]
 
-        # Count XML refs
+        # Count XML refs and Excel refs
         xml_ref_counts = Counter(xml_refs)
+        xls_ref_counts = Counter(xls_refs)
 
-        # === (A) Excel 'property ref' not found in XML or found more than once ===
+        # === (A) Duplicate external_reference entries within XML ===
+        st.subheader("Duplicate external_reference entries in XML")
+        xml_duplicates = {ref: count for ref, count in xml_ref_counts.items() if count > 1}
+        if xml_duplicates:
+            st.write("The following external_reference values appear multiple times in the XML:")
+            for ref, count in xml_duplicates.items():
+                st.write(f"- '{ref}': appears {count} times")
+        else:
+            st.success("No duplicate external_reference entries found in XML.")
+
+        # === (B) Duplicate Property ref entries within Excel ===
+        st.subheader("Duplicate Property ref entries in Excel")
+        xls_duplicates = {ref: count for ref, count in xls_ref_counts.items() if count > 1}
+        if xls_duplicates:
+            st.write("The following Property ref values appear multiple times in the Excel file:")
+            duplicate_rows = []
+            for ref, count in xls_duplicates.items():
+                # Find all rows with this duplicate ref
+                matching_rows = df_xls[df_xls['Property ref'].astype(str).str.strip() == ref]
+                for _, row in matching_rows.iterrows():
+                    entry = {
+                        'Property url': row.get('Property url', ''),
+                        'Property ref': ref,
+                        'Sale status': row.get('Sale status', ''),
+                        'Date created': row.get('Date created', ''),
+                        'Date last edited': row.get('Date last edited', ''),
+                        'Duplicate Count': count
+                    }
+                    duplicate_rows.append(entry)
+            
+            if duplicate_rows:
+                df_duplicates = pd.DataFrame(duplicate_rows)
+                st.dataframe(df_duplicates)
+        else:
+            st.success("No duplicate Property ref entries found in Excel.")
+
+        # === (C) Excel 'property ref' not found in XML or found more than once ===
         missing_or_duplicated_in_xml = []
         for _, row in df_xls.iterrows():
             ref = str(row['Property ref']).strip()
@@ -206,14 +243,14 @@ if xls_file:
                 }
                 missing_or_duplicated_in_xml.append(entry)
 
-        st.subheader("Excel refs not found or duplicated in XML")
+        st.subheader("Excel refs not found in XML")
         if missing_or_duplicated_in_xml:
             df_result = pd.DataFrame(missing_or_duplicated_in_xml)
             st.dataframe(df_result)
         else:
             st.success("All Excel 'Property ref' values matched exactly once in XML.")
 
-        # === (B) XML <external_reference> not found in Excel ===
+        # === (D) XML <external_reference> not found in Excel ===
         st.subheader("XML refs missing in Excel")
         xls_set = set(xls_refs)
         xml_only = []
